@@ -1,0 +1,20 @@
+{
+  "/_not-found": "/_not-found",
+  "/page": "/",
+  "/about/page": "/about",
+  "/cookies/page": "/cookies",
+  "/artists/page": "/artists",
+  "/how-it-works/page": "/how-it-works",
+  "/library/page": "/library",
+  "/discover/page": "/discover",
+  "/pricing/page": "/pricing",
+  "/terms/page": "/terms",
+  "/privacy/page": "/privacy",
+  "/upload/page": "/upload",
+  "/artists/faq/page": "/artists/faq",
+  "/artists/guidelines/page": "/artists/guidelines",
+  "/artists/onboarding/page": "/artists/onboarding",
+  "/auth/signin/page": "/auth/signin",
+  "/auth/signup/page": "/auth/signup",
+  "/track/[id]/page": "/track/[id]"
+}

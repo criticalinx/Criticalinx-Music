@@ -29,7 +29,7 @@ export default function Home() {
           </h1>
 
           <p className="text-xl md:text-2xl text-muted-foreground max-w-3xl mx-auto">
-            Stream uplifting music. Support independent artists. 99% goes directly to creators.
+            Stream uplifting music. Support independent artists. 97% goes directly to creators.
           </p>
 
           <div className="flex gap-4 justify-center pt-6">
@@ -101,9 +101,9 @@ export default function Home() {
               <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-6">
                 <DollarSign className="h-6 w-6 text-primary" />
               </div>
-              <h3 className="text-xl font-semibold mb-3">99% to Artists</h3>
+              <h3 className="text-xl font-semibold mb-3">97% to Artists</h3>
               <p className="text-muted-foreground leading-relaxed">
-                Fair revenue split. Weekly payouts via Stripe. Full transparency on every sale.
+                Fair revenue split with only 3% platform fee. Weekly payouts via Stripe. Full transparency on every sale.
               </p>
             </Card>
 

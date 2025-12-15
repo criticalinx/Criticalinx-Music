@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Upload, Music, X, CheckCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/lib/supabase';
+import { useRouter } from 'next/navigation';
 
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -19,8 +20,45 @@ export default function UploadPage() {
   const [genre, setGenre] = useState('');
   const [vibe, setVibe] = useState('');
   const [price, setPrice] = useState('0.00');
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [userEmail, setUserEmail] = useState<string>('');
+  const [userId, setUserId] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+  const router = useRouter();
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      setIsAuthenticated(!!user);
+      setUserEmail(user?.email || '');
+      setUserId(user?.id || '');
+      setIsLoading(false);
+
+      if (!user) {
+        toast({
+          title: 'Authentication required',
+          description: 'Please sign in to upload tracks.',
+          variant: 'destructive',
+        });
+        setTimeout(() => router.push('/auth/signin'), 1500);
+      }
+    };
+
+    checkAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session?.user);
+      setUserEmail(session?.user?.email || '');
+      setUserId(session?.user?.id || '');
+      if (!session?.user) {
+        router.push('/auth/signin');
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [router, toast]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
@@ -70,7 +108,7 @@ export default function UploadPage() {
     }
   };
 
-  const handleSubmit = async (isDraft: boolean) => {
+  const handleSubmit = async (status: 'draft' | 'pre-release' | 'published') => {
     if (!file || !title) {
       toast({
         title: 'Missing information',
@@ -101,7 +139,10 @@ export default function UploadPage() {
 
       const { error: uploadError } = await supabase.storage
         .from('audio')
-        .upload(filePath, file);
+        .upload(filePath, file, {
+          contentType: file.type || 'audio/mpeg',
+          upsert: false
+        });
 
       if (uploadError) throw uploadError;
 
@@ -115,15 +156,18 @@ export default function UploadPage() {
           price: parseFloat(price),
           file_path: filePath,
           artist_id: user.id,
-          status: isDraft ? 'draft' : 'published',
+          status,
         });
 
       if (insertError) throw insertError;
 
-      toast({
-        title: isDraft ? 'Draft saved' : 'Track published',
-        description: isDraft ? 'Your track has been saved as a draft.' : 'Your track is now live!',
-      });
+      const statusMessages = {
+        draft: { title: 'Draft saved', description: 'Your track has been saved as a draft.' },
+        'pre-release': { title: 'Pre-release ready', description: 'Your track is now available for feedback!' },
+        published: { title: 'Track published', description: 'Your track is now live!' },
+      };
+
+      toast(statusMessages[status]);
 
       setFile(null);
       setTitle('');
@@ -145,6 +189,31 @@ export default function UploadPage() {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="container section-padding max-w-4xl">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <div className="container section-padding max-w-4xl">
+        <Card>
+          <CardContent className="p-12 text-center space-y-4">
+            <h2>Authentication Required</h2>
+            <p className="text-muted-foreground">
+              You need to be signed in to upload tracks. Redirecting to sign in...
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="container section-padding max-w-4xl">
       <div className="space-y-8">
@@ -154,6 +223,23 @@ export default function UploadPage() {
             Share your positive music with the world. Keep 99% of revenue.
           </p>
         </div>
+
+        <Card className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                  Signed in as: <span className="font-bold">{userEmail}</span>
+                </p>
+                <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                  User ID: {userId}
+                </p>
+              </div>
+              <CheckCircle className="h-5 w-5 text-green-500" />
+            </div>
+          </CardContent>
+        </Card>
 
         <Card>
           <CardHeader>
@@ -293,14 +379,22 @@ export default function UploadPage() {
               <Button
                 variant="outline"
                 className="flex-1"
-                onClick={() => handleSubmit(true)}
+                onClick={() => handleSubmit('draft')}
                 disabled={uploading}
               >
                 Save as Draft
               </Button>
               <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => handleSubmit('pre-release')}
+                disabled={uploading}
+              >
+                Pre-Release for Feedback
+              </Button>
+              <Button
                 className="flex-1 bg-primary"
-                onClick={() => handleSubmit(false)}
+                onClick={() => handleSubmit('published')}
                 disabled={uploading}
               >
                 <Music className="h-4 w-4 mr-2" />

@@ -1,14 +1,83 @@
+'use client';
+
 import { Play, DollarSign, Share2, Flag, MessageCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-
-export function generateStaticParams() {
-  return [];
-}
+import { DiscussionThread } from '@/components/discussion/DiscussionThread';
+import { useState } from 'react';
 
 export default function TrackPage({ params }: { params: { id: string } }) {
+  const [discussions, setDiscussions] = useState([
+    {
+      id: '1',
+      user_id: 'user1',
+      message: 'This track is amazing! Really uplifting and positive vibes.',
+      created_at: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+      user: {
+        display_name: 'Sarah Johnson',
+        avatar_url: '',
+      },
+      reactions: {
+        like: 5,
+        love: 2,
+      },
+      hasUserReacted: false,
+    },
+    {
+      id: '2',
+      user_id: 'user2',
+      message: 'Love the energy in this! Perfect for my morning routine.',
+      created_at: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+      user: {
+        display_name: 'Mike Chen',
+        avatar_url: '',
+      },
+      reactions: {
+        like: 3,
+        love: 1,
+      },
+      hasUserReacted: false,
+    },
+  ]);
+
+  const handlePostMessage = (message: string, parentId?: string) => {
+    const newDiscussion = {
+      id: Date.now().toString(),
+      user_id: 'current-user',
+      message,
+      created_at: new Date().toISOString(),
+      user: {
+        display_name: 'You',
+        avatar_url: '',
+      },
+      reactions: {
+        like: 0,
+        love: 0,
+      },
+      hasUserReacted: false,
+    };
+    setDiscussions([newDiscussion, ...discussions]);
+  };
+
+  const handleReact = (discussionId: string, reactionType: string) => {
+    setDiscussions(discussions.map(d => {
+      if (d.id === discussionId) {
+        return {
+          ...d,
+          reactions: {
+            ...d.reactions,
+            [reactionType]: d.hasUserReacted
+              ? (d.reactions?.[reactionType as keyof typeof d.reactions] || 0) - 1
+              : (d.reactions?.[reactionType as keyof typeof d.reactions] || 0) + 1,
+          },
+          hasUserReacted: !d.hasUserReacted,
+        };
+      }
+      return d;
+    }));
+  };
   return (
     <div className="container section-padding max-w-5xl">
       <div className="grid md:grid-cols-[300px_1fr] gap-8">
@@ -73,29 +142,18 @@ export default function TrackPage({ params }: { params: { id: string } }) {
 
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-semibold flex items-center gap-2">
-                <MessageCircle className="h-5 w-5" />
-                Discussion (12)
+              <h3 className="text-2xl font-semibold flex items-center gap-2">
+                <MessageCircle className="h-6 w-6" />
+                Discussion ({discussions.length})
               </h3>
-              <Button variant="outline" size="sm">Add Comment</Button>
             </div>
 
-            <Card className="p-4 space-y-3">
-              <div className="flex gap-3">
-                <Avatar className="h-8 w-8">
-                  <AvatarFallback>U</AvatarFallback>
-                </Avatar>
-                <div className="flex-1 space-y-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-medium">Username</span>
-                    <span className="text-xs text-muted-foreground">2 hours ago</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground">
-                    This track is amazing! Really uplifting and positive vibes.
-                  </p>
-                </div>
-              </div>
-            </Card>
+            <DiscussionThread
+              trackId={params.id}
+              discussions={discussions}
+              onPostMessage={handlePostMessage}
+              onReact={handleReact}
+            />
           </div>
         </div>
       </div>

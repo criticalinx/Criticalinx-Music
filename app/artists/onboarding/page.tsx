@@ -1,13 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Music, CheckCircle } from 'lucide-react';
+import { Music, CheckCircle, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import { useToast } from '@/hooks/use-toast';
 
 export default function ArtistOnboarding() {
   const [step, setStep] = useState(1);
@@ -15,13 +18,156 @@ export default function ArtistOnboarding() {
   const [bio, setBio] = useState('');
   const [genre, setGenre] = useState('');
   const [loading, setLoading] = useState(false);
+  const [checkingStatus, setCheckingStatus] = useState(true);
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const { toast } = useToast();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    checkOnboardingStatus();
+  }, []);
+
+  useEffect(() => {
+    const success = searchParams.get('success');
+    const refresh = searchParams.get('refresh');
+
+    if (success === 'true') {
+      checkConnectStatus();
+    } else if (refresh === 'true') {
+      toast({
+        title: 'Please complete onboarding',
+        description: 'Continue where you left off with Stripe Connect.',
+      });
+    }
+  }, [searchParams]);
+
+  const checkOnboardingStatus = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push('/auth/signin');
+        return;
+      }
+
+      const { data: profile } = await supabase
+        .from('user_profiles')
+        .select('display_name, bio, stripe_onboarding_complete')
+        .eq('id', user.id)
+        .single();
+
+      if (profile?.stripe_onboarding_complete) {
+        setStep(3);
+      } else if (profile?.display_name && profile.display_name !== user.email?.split('@')[0]) {
+        setStep(2);
+        setArtistName(profile.display_name);
+        setBio(profile.bio || '');
+      }
+    } catch (error) {
+      console.error('Error checking status:', error);
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
+
+  const checkConnectStatus = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      if (!session) return;
+
+      const response = await fetch('/.netlify/functions/check-connect-status', {
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      });
+
+      if (response.ok) {
+        const status = await response.json();
+
+        if (status.onboardingComplete) {
+          setStep(3);
+          toast({
+            title: 'Onboarding complete!',
+            description: 'Your Stripe Connect account is ready.',
+          });
+        }
+      }
+    } catch (error) {
+      console.error('Error checking Connect status:', error);
+    }
+  };
+
+  const handleProfileSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!artistName) {
+      toast({
+        title: 'Artist name required',
+        description: 'Please enter your artist name.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setStep(2);
+  };
+
+  const handleStripeConnect = async () => {
     setLoading(true);
 
-    setLoading(false);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user || !session) {
+        toast({
+          title: 'Authentication required',
+          description: 'Please sign in to continue.',
+          variant: 'destructive',
+        });
+        router.push('/auth/signin');
+        return;
+      }
+
+      const response = await fetch('/.netlify/functions/create-connect-account', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${session.access_token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          artistName,
+          genre,
+          bio,
+          email: user.email,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create Connect account');
+      }
+
+      const { url } = await response.json();
+      window.location.href = url;
+    } catch (error) {
+      console.error('Error creating Connect account:', error);
+      toast({
+        title: 'Connection failed',
+        description: error instanceof Error ? error.message : 'Failed to connect Stripe account.',
+        variant: 'destructive',
+      });
+      setLoading(false);
+    }
   };
+
+  if (checkingStatus) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-primary/10 to-accent/10 py-12 px-4">
@@ -64,7 +210,7 @@ export default function ArtistOnboarding() {
               <CardDescription>Tell us about yourself and your music</CardDescription>
             </CardHeader>
             <CardContent>
-              <form onSubmit={(e) => { e.preventDefault(); setStep(2); }} className="space-y-4">
+              <form onSubmit={handleProfileSubmit} className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="artistName">Artist Name</Label>
                   <Input
@@ -132,8 +278,15 @@ export default function ArtistOnboarding() {
                 </ul>
               </div>
               <div className="space-y-4">
-                <Button className="w-full" onClick={() => setStep(3)}>
-                  Connect Stripe Account
+                <Button className="w-full" onClick={handleStripeConnect} disabled={loading}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Connecting...
+                    </>
+                  ) : (
+                    'Connect Stripe Account'
+                  )}
                 </Button>
                 <Button variant="outline" className="w-full" onClick={() => setStep(1)}>
                   Back

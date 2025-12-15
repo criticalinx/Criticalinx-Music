@@ -1,0 +1,59 @@
+functionsDirectory = "C:\\Users\\lance\\iCloudDrive\\2025\\Criticalinx\\project-bolt-sb1-4nlhfzvo\\project\\netlify\\functions"
+functionsDirectoryOrigin = "config"
+headersOrigin = "config"
+redirectsOrigin = "config"
+
+[build]
+publish = "C:\\Users\\lance\\iCloudDrive\\2025\\Criticalinx\\project-bolt-sb1-4nlhfzvo\\project\\.next"
+publishOrigin = "config"
+commandOrigin = "config"
+command = "npm run build"
+functions = "C:\\Users\\lance\\iCloudDrive\\2025\\Criticalinx\\project-bolt-sb1-4nlhfzvo\\project\\netlify\\functions"
+
+[build.environment]
+NEXT_TELEMETRY_DISABLED = "1"
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[functions]
+
+[functions."*"]
+node_bundler = "esbuild"
+
+[[plugins]]
+origin = "config"
+package = "@netlify/plugin-nextjs"
+
+[plugins.inputs]
+
+[[headers]]
+for = "/*"
+
+[headers.values]
+X-Frame-Options = "DENY"
+X-Content-Type-Options = "nosniff"
+Referrer-Policy = "strict-origin-when-cross-origin"
+Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+[[redirects]]
+from = "/*"
+to = "/.netlify/functions/:splat"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+path = ["/api/*"]
+
+[redirects.headers]

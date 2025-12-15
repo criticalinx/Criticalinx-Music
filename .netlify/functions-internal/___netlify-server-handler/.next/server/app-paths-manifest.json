@@ -1,0 +1,20 @@
+{
+  "/_not-found": "app/_not-found.js",
+  "/page": "app/page.js",
+  "/about/page": "app/about/page.js",
+  "/cookies/page": "app/cookies/page.js",
+  "/artists/page": "app/artists/page.js",
+  "/how-it-works/page": "app/how-it-works/page.js",
+  "/library/page": "app/library/page.js",
+  "/discover/page": "app/discover/page.js",
+  "/pricing/page": "app/pricing/page.js",
+  "/terms/page": "app/terms/page.js",
+  "/privacy/page": "app/privacy/page.js",
+  "/upload/page": "app/upload/page.js",
+  "/artists/faq/page": "app/artists/faq/page.js",
+  "/artists/guidelines/page": "app/artists/guidelines/page.js",
+  "/artists/onboarding/page": "app/artists/onboarding/page.js",
+  "/auth/signin/page": "app/auth/signin/page.js",
+  "/auth/signup/page": "app/auth/signup/page.js",
+  "/track/[id]/page": "app/track/[id]/page.js"
+}
