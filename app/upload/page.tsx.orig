@@ -28,21 +28,15 @@ export default function UploadPage() {
   const { toast } = useToast();
   const router = useRouter();
 
-  // --- Auth check ---
   useEffect(() => {
-    let mounted = true;
-
     const checkAuth = async () => {
-      const { data: sessionData } = await supabase.auth.getSession();
-      if (!mounted) return;
-
-      const session = sessionData.session;
-      setIsAuthenticated(!!session);
-      setUserEmail(session?.user?.email || '');
-      setUserId(session?.user?.id || '');
+      const { data: { user } } = await supabase.auth.getUser();
+      setIsAuthenticated(!!user);
+      setUserEmail(user?.email || '');
+      setUserId(user?.id || '');
       setIsLoading(false);
 
-      if (!session) {
+      if (!user) {
         toast({
           title: 'Authentication required',
           description: 'Please sign in to upload tracks.',
@@ -52,51 +46,47 @@ export default function UploadPage() {
       }
     };
 
-    checkAuth();
+  useEffect(() => {
+  let mounted = true;
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!mounted) return;
+  const initAuth = async () => {
+    const { data: sessionData } = await supabase.auth.getSession();
 
-      setIsAuthenticated(!!session);
-      setUserEmail(session?.user?.email || '');
-      setUserId(session?.user?.id || '');
-      setIsLoading(false);
+    if (!mounted) return;
 
-      if (!session) {
-        router.push('/auth/signin');
-      }
-    });
+    const session = sessionData.session;
+    setIsAuthenticated(!!session);
+    setUserEmail(session?.user?.email || '');
+    setUserId(session?.user?.id || '');
+    setIsLoading(false);
 
-    return () => {
-      mounted = false;
-      subscription.unsubscribe();
-    };
-  }, [router, toast]);
-
-  // --- File handlers ---
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (!selectedFile) return;
-
-    const validTypes = ['audio/mpeg', 'audio/wav', 'audio/x-wav', 'audio/flac'];
-    const maxSize = 500 * 1024 * 1024; // 500MB
-    const isValidType =
-      validTypes.includes(selectedFile.type) || /\.(mp3|wav|flac)$/i.test(selectedFile.name);
-
-    if (!isValidType) {
-      toast({ title: 'Invalid file type', description: 'Please upload MP3, WAV, or FLAC.', variant: 'destructive' });
-      return;
+    if (!session) {
+      router.push('/auth/signin');
     }
-
-    if (selectedFile.size > maxSize) {
-      toast({ title: 'File too large', description: 'Max 500MB.', variant: 'destructive' });
-      return;
-    }
-
-    setFile(selectedFile);
   };
+
+  initAuth();
+
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange((_event, session) => {
+    if (!mounted) return;
+
+    setIsAuthenticated(!!session);
+    setUserEmail(session?.user?.email || '');
+    setUserId(session?.user?.id || '');
+    setIsLoading(false);
+
+    if (!session) {
+      router.push('/auth/signin');
+    }
+  });
+
+  return () => {
+    mounted = false;
+    subscription.unsubscribe();
+  };
+}, [router]);
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
@@ -107,17 +97,24 @@ export default function UploadPage() {
     }
   };
 
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => e.preventDefault();
+  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+  };
 
   const removeFile = () => {
     setFile(null);
-    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
   };
 
-  // --- Upload ---
   const handleSubmit = async (status: 'draft' | 'pre-release' | 'published') => {
     if (!file || !title) {
-      toast({ title: 'Missing information', description: 'File and title required.', variant: 'destructive' });
+      toast({
+        title: 'Missing information',
+        description: 'Please provide a file and track title.',
+        variant: 'destructive',
+      });
       return;
     }
 
@@ -125,56 +122,62 @@ export default function UploadPage() {
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error('Authentication required');
+
+      if (!user) {
+        toast({
+          title: 'Authentication required',
+          description: 'Please sign in to upload tracks.',
+          variant: 'destructive',
+        });
+        setUploading(false);
+        return;
+      }
 
       const fileExt = file.name.split('.').pop();
-      const filePath = `tracks/${user.id}/${Date.now()}.${fileExt}`;
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
 
-      const uploadFile = file instanceof Blob ? file : new Blob([file], { type: 'audio/mpeg' });
-
-      const { error: uploadError } = await supabase.storage.from('audio').upload(filePath, uploadFile, {
-        contentType: file.type || 'audio/mpeg',
-        upsert: false,
-      });
+      const { error: uploadError } = await supabase.storage
+        .from('audio')
+        .upload(filePath, file, {
+          contentType: file.type || 'audio/mpeg',
+          upsert: false
+        });
 
       if (uploadError) throw uploadError;
 
-      const { error: insertError } = await supabase.from('tracks').insert({
-        title,
-        description,
-        genre,
-        vibe,
-        price: parseFloat(price),
-        file_path: filePath,
-        artist_id: user.id,
-        status,
-      });
+      const { error: insertError } = await supabase
+        .from('tracks')
+        .insert({
+          title,
+          description,
+          genre,
+          vibe,
+          price: parseFloat(price),
+          file_path: filePath,
+          artist_id: user.id,
+          status,
+        });
 
       if (insertError) throw insertError;
 
-      toast({
-        title:
-          status === 'draft'
-            ? 'Draft saved'
-            : status === 'pre-release'
-            ? 'Pre-release ready'
-            : 'Track published',
-        description:
-          status === 'draft'
-            ? 'Your track is saved as a draft.'
-            : status === 'pre-release'
-            ? 'Your track is available for feedback.'
-            : 'Your track is live!',
-      });
+      const statusMessages = {
+        draft: { title: 'Draft saved', description: 'Your track has been saved as a draft.' },
+        'pre-release': { title: 'Pre-release ready', description: 'Your track is now available for feedback!' },
+        published: { title: 'Track published', description: 'Your track is now live!' },
+      };
 
-      // Reset form
+      toast(statusMessages[status]);
+
       setFile(null);
       setTitle('');
       setDescription('');
       setGenre('');
       setVibe('');
       setPrice('0.00');
-      if (fileInputRef.current) fileInputRef.current.value = '';
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     } catch (error) {
       toast({
         title: 'Upload failed',
@@ -186,50 +189,66 @@ export default function UploadPage() {
     }
   };
 
-  if (isLoading)
+  if (isLoading) {
     return (
-      <div className="container section-padding max-w-4xl flex items-center justify-center min-h-[400px]">
-        <p className="text-muted-foreground">Loading...</p>
+      <div className="container section-padding max-w-4xl">
+        <div className="flex items-center justify-center min-h-[400px]">
+          <p className="text-muted-foreground">Loading...</p>
+        </div>
       </div>
     );
+  }
 
-  if (!isAuthenticated)
+  if (!isAuthenticated) {
     return (
       <div className="container section-padding max-w-4xl">
         <Card>
           <CardContent className="p-12 text-center space-y-4">
             <h2>Authentication Required</h2>
-            <p className="text-muted-foreground">You need to be signed in to upload tracks. Redirecting...</p>
+            <p className="text-muted-foreground">
+              You need to be signed in to upload tracks. Redirecting to sign in...
+            </p>
           </CardContent>
         </Card>
       </div>
     );
+  }
 
   return (
     <div className="container section-padding max-w-4xl">
       <div className="space-y-8">
-        {/* Signed-in info card */}
+        <div>
+          <h1>Upload Track</h1>
+          <p className="text-muted-foreground mt-2">
+            Share your positive music with the world. Keep 99% of revenue.
+          </p>
+        </div>
+
         <Card className="bg-green-50 dark:bg-green-950 border-green-200 dark:border-green-800">
-          <CardContent className="pt-6 flex items-center gap-3">
-            <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-            <div className="flex-1">
-              <p className="text-sm font-medium text-green-900 dark:text-green-100">
-                Signed in as: <span className="font-bold">{userEmail}</span>
-              </p>
-              <p className="text-xs text-green-700 dark:text-green-300 mt-1">User ID: {userId}</p>
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-green-900 dark:text-green-100">
+                  Signed in as: <span className="font-bold">{userEmail}</span>
+                </p>
+                <p className="text-xs text-green-700 dark:text-green-300 mt-1">
+                  User ID: {userId}
+                </p>
+              </div>
+              <CheckCircle className="h-5 w-5 text-green-500" />
             </div>
-            <CheckCircle className="h-5 w-5 text-green-500" />
           </CardContent>
         </Card>
 
-        {/* Upload Card */}
         <Card>
           <CardHeader>
             <CardTitle>Track Details</CardTitle>
-            <CardDescription>Upload your audio file and add information about your track.</CardDescription>
+            <CardDescription>
+              Upload your audio file and add information about your track.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            {/* File drop area */}
             <div
               onDrop={handleDrop}
               onDragOver={handleDragOver}
@@ -249,7 +268,9 @@ export default function UploadPage() {
                     <CheckCircle className="h-8 w-8 text-green-500" />
                   </div>
                   <p className="font-medium">{file.name}</p>
-                  <p className="text-sm text-muted-foreground">{(file.size / (1024 * 1024)).toFixed(2)} MB</p>
+                  <p className="text-sm text-muted-foreground">
+                    {(file.size / (1024 * 1024)).toFixed(2)} MB
+                  </p>
                   <Button
                     type="button"
                     variant="ghost"
@@ -271,22 +292,37 @@ export default function UploadPage() {
                   <div>
                     <p className="font-medium">Drop your audio file here</p>
                     <p className="text-sm text-muted-foreground">or click to browse</p>
-                    <p className="text-xs text-muted-foreground mt-2">Supports MP3, WAV, FLAC (max 500MB)</p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      Supports MP3, WAV, FLAC (max 500MB)
+                    </p>
                   </div>
                 </>
               )}
             </div>
 
-            {/* Track metadata form */}
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="title">Track Title *</Label>
-                <Input id="title" placeholder="Enter track title" value={title} onChange={(e) => setTitle(e.target.value)} required />
+                <Input
+                  id="title"
+                  placeholder="Enter track title"
+                  value={title}
+                  onChange={(e) => setTitle(e.target.value)}
+                  required
+                />
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="description">Description</Label>
-                <Textarea id="description" placeholder="Tell us about your track..." rows={4} value={description} onChange={(e) => setDescription(e.target.value)} />
+                <Textarea
+                  id="description"
+                  placeholder="Tell us about your track..."
+                  rows={4}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                />
               </div>
+
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="genre">Genre</Label>
@@ -304,6 +340,7 @@ export default function UploadPage() {
                     </SelectContent>
                   </Select>
                 </div>
+
                 <div className="space-y-2">
                   <Label htmlFor="vibe">Vibe</Label>
                   <Select value={vibe} onValueChange={setVibe}>
@@ -320,17 +357,46 @@ export default function UploadPage() {
                   </Select>
                 </div>
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="price">Price (USD)</Label>
-                <Input id="price" type="number" placeholder="0.00" step="0.01" min="0" value={price} onChange={(e) => setPrice(e.target.value)} />
-                <p className="text-xs text-muted-foreground">Set to $0.00 for free streaming. You keep 99% of paid sales.</p>
+                <Input
+                  id="price"
+                  type="number"
+                  placeholder="0.00"
+                  step="0.01"
+                  min="0"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Set to $0.00 for free streaming. You keep 99% of paid sales.
+                </p>
               </div>
             </div>
 
             <div className="flex gap-3 pt-4">
-              <Button variant="outline" className="flex-1" onClick={() => handleSubmit('draft')} disabled={uploading}>Save as Draft</Button>
-              <Button variant="secondary" className="flex-1" onClick={() => handleSubmit('pre-release')} disabled={uploading}>Pre-Release</Button>
-              <Button className="flex-1 bg-primary" onClick={() => handleSubmit('published')} disabled={uploading}>
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => handleSubmit('draft')}
+                disabled={uploading}
+              >
+                Save as Draft
+              </Button>
+              <Button
+                variant="secondary"
+                className="flex-1"
+                onClick={() => handleSubmit('pre-release')}
+                disabled={uploading}
+              >
+                Pre-Release for Feedback
+              </Button>
+              <Button
+                className="flex-1 bg-primary"
+                onClick={() => handleSubmit('published')}
+                disabled={uploading}
+              >
                 <Music className="h-4 w-4 mr-2" />
                 {uploading ? 'Uploading...' : 'Publish Track'}
               </Button>
